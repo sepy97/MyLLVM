@@ -25,18 +25,21 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
-  StringRef getPassName() const override { return "Disasm_husky pass"; }
+  StringRef getPassName() const override { return "Disasm_HUSKY pass"; }
 
 private:
   // We're looking for a basic block with a name containing this substring
-  std::string BasicBlockSubstr = "TRACEDLOOPBODY";
+  std::string BasicBlockSubstr = "TRACEDLOOPBODY"; // TODO: remove redundant substring
+  std::string CheckpointSubstr = "CHECKPOINT";
+  std::string RollbackSubstr   = "ROLLBACK";
+  std::string CommitSubstr     = "COMMIT";
 };
 
 char Disasm_husky::ID = 0;
 
 } // namespace
 
-INITIALIZE_PASS(Disasm_husky, "husky", "Disasm_husky pass",
+INITIALIZE_PASS(Disasm_husky, "HUSKY", "Disasm_HUSKY pass",
                 true, // is CFG only?
                 true  // is analysis?
 )
