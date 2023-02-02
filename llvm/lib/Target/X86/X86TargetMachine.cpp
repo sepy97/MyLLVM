@@ -517,7 +517,7 @@ void X86PassConfig::addPreRegAlloc() {
     addPass(createX86OptimizeLEAs());
     addPass(createX86CallFrameOptimization());
     addPass(createX86AvoidStoreForwardingBlocks());
-    addPass(createDisasm_husky());
+    //addPass(createDisasm_husky());
   }
 
   addPass(createX86SpeculativeLoadHardeningPass());
@@ -642,6 +642,7 @@ static bool onlyAllocateTileRegisters(const TargetRegisterInfo &TRI,
 }
 
 bool X86PassConfig::addRegAssignAndRewriteOptimized() {
+    addPass(createDisasm_husky());
   // Don't support tile RA when RA is specified by command line "-regalloc".
   if (!isCustomizedRegAlloc() && EnableTileRAPass) {
     // Allocate tile register first.
