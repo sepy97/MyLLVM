@@ -13163,6 +13163,20 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
   case X86::BI_mm_pause: {
     return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::x86_sse2_pause));
   }
+  case X86::BI__UCI_trace: {
+    LLVMContext& C = Builder.getContext();
+    E->getArg(0)->IgnoreImplicit()->dump();
+    auto SL = dyn_cast<StringLiteral>(E->getArg(0)->IgnoreImplicit())->getString();
+    errs() << "Content of an argument: " << SL << "\n";
+    Instruction* I = Builder.CreateCall(CGM.getIntrinsic(Intrinsic::x86_uci_trace));
+    MDNode* N = MDNode::get(C, MDString::get(C, SL));
+    I->setMetadata("brsequence", N);
+    return I;
+  }
+  case X86::BI__UCI_endtrace: {
+    Instruction* I = Builder.CreateCall(CGM.getIntrinsic(Intrinsic::x86_uci_endtrace));
+    return I;
+  }
   case X86::BI__rdtsc: {
     return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::x86_rdtsc));
   }

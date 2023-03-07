@@ -2773,6 +2773,8 @@ let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
               Intrinsic<[], [llvm_i8_ty], [ImmArg<ArgIndex<0>>]>;
   def int_x86_xtest : ClangBuiltin<"__builtin_ia32_xtest">,
               Intrinsic<[llvm_i32_ty], [], []>;
+  def int_x86_uci_trace : Intrinsic<[llvm_i32_ty], [], []>;
+  def int_x86_uci_endtrace : Intrinsic<[llvm_i32_ty], [], []>;
 }
 
 //===----------------------------------------------------------------------===//

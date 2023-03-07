@@ -819,6 +819,9 @@ TARGET_BUILTIN(__builtin_ia32_xend, "v", "n", "rtm")
 TARGET_BUILTIN(__builtin_ia32_xabort, "vIc", "n", "rtm")
 TARGET_BUILTIN(__builtin_ia32_xtest, "i", "n", "rtm")
 
+BUILTIN(__UCI_trace, "vc*", "")
+BUILTIN(__UCI_endtrace, "v", "")
+
 BUILTIN(__builtin_ia32_rdpmc, "UOii", "")
 BUILTIN(__builtin_ia32_rdtsc, "UOi", "")
 BUILTIN(__rdtsc, "UOi", "")
