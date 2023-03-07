@@ -511,13 +511,14 @@ bool X86PassConfig::addPreISel() {
 }
 
 void X86PassConfig::addPreRegAlloc() {
+
+  
   if (getOptLevel() != CodeGenOpt::None) {
     addPass(&LiveRangeShrinkID);
     addPass(createX86FixupSetCC());
     addPass(createX86OptimizeLEAs());
     addPass(createX86CallFrameOptimization());
     addPass(createX86AvoidStoreForwardingBlocks());
-    //addPass(createDisasm_husky());
   }
 
   addPass(createX86SpeculativeLoadHardeningPass());
@@ -528,11 +529,14 @@ void X86PassConfig::addPreRegAlloc() {
     addPass(createX86PreTileConfigPass());
   else
     addPass(createX86FastPreTileConfigPass());
+
+  // @@@@ addPass(createDisasm_husky());
 }
 
 void X86PassConfig::addMachineSSAOptimization() {
   addPass(createX86DomainReassignmentPass());
   TargetPassConfig::addMachineSSAOptimization();
+
 }
 
 void X86PassConfig::addPostRegAlloc() {
@@ -640,6 +644,8 @@ static bool onlyAllocateTileRegisters(const TargetRegisterInfo &TRI,
                                       const TargetRegisterClass &RC) {
   return static_cast<const X86RegisterInfo &>(TRI).isTileRegisterClass(&RC);
 }
+
+// bool X86PassConfig::addRegAssignAndRewriteFast() { //@@@
 
 bool X86PassConfig::addRegAssignAndRewriteOptimized() {
     addPass(createDisasm_husky());

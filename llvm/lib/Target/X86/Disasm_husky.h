@@ -25,14 +25,20 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
+  unsigned getTraceKey(std::string *BBName);
+
   StringRef getPassName() const override { return "Disasm_HUSKY pass"; }
 
 private:
-  // We're looking for a basic block with a name containing this substring
-  std::string BasicBlockSubstr = "TRACEDLOOPBODY"; // TODO: remove redundant substring
-  std::string CheckpointSubstr = "CHECKPOINT";
-  std::string RollbackSubstr   = "ROLLBACK";
-  std::string CommitSubstr     = "COMMIT";
+  // We're looking for basic blocks with a name containing one of these substrings
+  std::string TraceSubstr      = "ucitrace";
+  std::string AbortSubstr      = "uciabort";
+  std::string CommitSubstr     = "ucicommit";
+
+  std::map<int, MachineBasicBlock *> TraceMap;
+  std::map<int, MachineBasicBlock *> AbortMap;
+  MachineBasicBlock *CommitBasicBlock = nullptr; // a single commit block for all traces
+
 };
 
 char Disasm_husky::ID = 0;
