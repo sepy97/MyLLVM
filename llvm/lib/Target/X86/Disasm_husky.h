@@ -9,7 +9,10 @@
 #include "X86InstrInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/GlobalISel/MachineIRBuilder.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+
+//#include "llvm/CodeGen/TargetPassConfig.h"
 
 using namespace llvm;
 

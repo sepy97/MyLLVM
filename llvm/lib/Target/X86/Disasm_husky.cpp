@@ -45,22 +45,44 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
       auto MRI = &MF.getRegInfo();
       auto FirstInstruction = TraceMBB.instr_begin();
       DebugLoc FirstDL = TraceMBB.findDebugLoc(FirstInstruction);
-      auto ChkptReg = MRI->createVirtualRegister(&X86::GR64RegClass);
+      //auto ChkptReg = MRI->createVirtualRegister(&X86::GR64RegClass);
+      auto AddReg = MRI->createVirtualRegister(&X86::GR64RegClass);
+
 
       // TODO: instead of those two instructions, add a single one (movq $-10000(%rsp), %rcx)
       // via .addReg(rsp).addImm(-10000)
-
+/*
+      auto ChkptInit = BuildMI(TraceMBB, FirstInstruction, FirstDL, XII->get(X86::MOV64rr), ChkptReg);
+      //ChkptInit.addReg(ChkptReg);
+      ChkptInit.addReg(0).addImm(-10000);
+      ChkptInit.addReg(X86::RSP);
+      ChkptInit->print(errs());
+*/
       errs() << "Saving a shifted rsp as checkpoint stack pointer:\n";
-      // movq    $-10000, %ChkptReg
+      // movq    $-1000, %ChkptReg
+/*
       auto ChkptInit = BuildMI(TraceMBB, FirstInstruction, FirstDL, XII->get(X86::MOV64ri32), ChkptReg);
-      ChkptInit.addImm(-10000);
+      ChkptInit.addImm(-1000);
       ChkptInit->print(errs());
 
       // addq    %rsp, %ChkptReg
-      auto AddChkpt = BuildMI(TraceMBB, FirstInstruction, FirstDL, XII->get(X86::ADD64rr), ChkptReg);
+      auto AddChkpt = BuildMI(TraceMBB, FirstInstruction, FirstDL, XII->get(X86::ADD64rr), AddReg);
       AddChkpt.addReg(ChkptReg);
       AddChkpt.addReg(X86::RSP);
       AddChkpt->print(errs());
+*/
+      // insert LEA instruction
+
+      // leaq    -1000(%rsp), %ChkptReg
+      auto ChkptLEA = BuildMI(TraceMBB, FirstInstruction, FirstDL, XII->get(X86::LEA64r), AddReg);
+      ChkptLEA.addReg(X86::RSP);
+      ChkptLEA.addImm(1);//-1000);
+      ChkptLEA.addReg(0);
+      ChkptLEA.addImm(-1000);
+      ChkptLEA.addReg(0);
+
+      errs() << "LEA64r: \n";
+      ChkptLEA->print(errs());
 
       for (auto &MI : TraceMBB) {
         if (MI.mayStore()) {
@@ -79,7 +101,7 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
 
           // change RSP to checkpointSP
           auto ShiftRsp = BuildMI(TraceMBB, MI, DL, XII->get(X86::MOV64rr), X86::RSP);
-          ShiftRsp.addReg(ChkptReg);
+          ShiftRsp.addReg(AddReg /* @@@@ ChkptReg*/);
 
           // TODO: next two instructions should be in one instruction (PUSH64m with memory address as an operand)
           // move memory address to the virtual register
@@ -103,8 +125,12 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
           PushMemItem.addImm(0).addReg(0);
 
           // save RSP to checkpointSP (checkpointSP should change bcoz we already checkpointed two more values)
-          auto ShiftChkpt = BuildMI(TraceMBB, MI, DL, XII->get(X86::MOV64rr), ChkptReg);
-          ShiftChkpt.addReg(X86::RSP);
+
+
+            auto ShiftChkpt = BuildMI(TraceMBB, MI, DL, XII->get(X86::MOV64rr));//, AddReg );
+            ShiftChkpt.addReg(AddReg );  /* @@@@ for O0: */
+            ShiftChkpt.addReg(X86::RSP);
+            /* ShiftChkpt.addReg(AddReg); /* @@@@ for O2: */
 
           // change RSP back (get it from the reserved register)
           auto RestoreRsp = BuildMI(TraceMBB, MI, DL, XII->get(X86::MOV64rr), X86::RSP);
@@ -120,27 +146,30 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
       FirstDL = RollbackMBB.findDebugLoc(FirstInstruction);
 
       // Save rsp
-      auto SaveRsp = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::MOV64rr));
       auto VReg = MRI->createVirtualRegister(&X86::GR64RegClass);
-      SaveRsp.addDef(VReg);
+      auto SaveRsp = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::MOV64rr), VReg);
+      //SaveRsp.addDef(VReg); // @@@@
       SaveRsp.addReg(X86::RSP);
 
       // Change rsp to checkpointSP
-      auto ShiftRsp = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::MOV64rr), X86::RSP);
-      ShiftRsp.addReg(ChkptReg);
+      auto ShiftRsp = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::MOV64rr));//, X86::RSP);
+        ShiftRsp.addReg(X86::RSP); // @@@@
+      ShiftRsp.addReg(AddReg /* @@@@ ChkptReg */);
+      errs() << "Shifting RSP to the checkpoint Stack Pointer: \n";
+      ShiftRsp->print(errs());
 
       while (MemoryWriteCtr > 0) {
         MemoryWriteCtr--;
 
         // pop memory item
         auto MemItem = MRI->createVirtualRegister(&X86::GR64RegClass);
-        auto PopMemItem = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::POP64r));
-        PopMemItem.addDef(MemItem);
+        auto PopMemItem = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::POP64r), MemItem);
+        // PopMemItem.addDef(MemItem); // @@@@
 
         // pop memory address
         auto MemAddr = MRI->createVirtualRegister(&X86::GR64RegClass);
-        auto PopMemAddr = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::POP64r));
-        PopMemAddr.addDef(MemAddr);
+        auto PopMemAddr = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::POP64r), MemAddr);
+        //PopMemAddr.addDef(MemAddr); // @@@@
 
         // move memory item to the memory address
         auto MoveMemItemToAddr = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::MOV64mr));
@@ -151,7 +180,8 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
       }
 
       // change RSP back (get it from the reserved register)
-      auto RestoreRsp = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::MOV64rr), X86::RSP);
+      auto RestoreRsp = BuildMI(RollbackMBB, FirstInstruction, FirstDL, XII->get(X86::MOV64rr) );//, X86::RSP);
+      RestoreRsp.addReg(X86::RSP);
       RestoreRsp.addReg(VReg);
 
       // find and remove an instruction that call xabort
@@ -163,7 +193,10 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
       }
 
       // @@@@@@@@@@@@@@@@ END OF ROLLBACK @@@
-
+    errs() << "Modified Trace MBB:\n";
+    TraceMBB.dump();
+    errs() << "Modified Rollback MBB:\n";
+    RollbackMBB.dump();
   }
 
   // find and remove an instruction that call xend from CommitBasicBlock
@@ -174,6 +207,7 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
+  errs() << "FINISHED Checkpointing pass!\n";
   return false;
 }
 
