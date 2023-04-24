@@ -18,11 +18,13 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
     std::string BBName = MBB.getFullName();
     if (BBName.find(TraceSubstr) != std::string::npos) {
       unsigned TraceKey = getTraceKey(&BBName);
+        errs() << "Trace BB key: " << TraceKey << "\n";
       TraceMap[TraceKey] = &MBB;
       Checkpointed = true;
 
     } else if (BBName.find(AbortSubstr) != std::string::npos) {
       unsigned TraceKey = getTraceKey(&BBName);
+        errs() << "Abort BB key: " << TraceKey << "\n";
       AbortMap[TraceKey] = &MBB;
       Rolledback = true;
 
@@ -184,5 +186,6 @@ unsigned Disasm_husky::getTraceKey(std::string* BBName) {
     }
 
     // the trace key is the second token
-    return ((unsigned) std::stoi(tokens[1]));
+    unsigned numOfTokens = tokens.size();
+    return ((unsigned) std::stoi(tokens[numOfTokens-1]));
 }
