@@ -62,6 +62,12 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
 
       for (auto &MI : TraceMBB) {
         if (MI.mayStore()) {
+          // pass MI which are TSX instructions
+          if (MI.getOpcode() == X86::XBEGIN || MI.getOpcode() == X86::XEND || MI.getOpcode() == X86::XABORT || MI.getOpcode() == X86::XTEST) {
+            errs() << "Skipping TSX instruction:\n";
+            MI.print(errs());
+            continue;
+          }
           MemoryWriteCtr++;
 
           DebugLoc DL = MI.getDebugLoc();
