@@ -117,6 +117,7 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
       // @@@@@@@@@@@@@@@@ END OF CHECKPOINTING @@@
 
       // @@@@@@@@@@@@@@@@@@@@@@ ROLLBACK @@@
+      errs() << "Number of trace BBs: " << TraceMap.size() << "\nNumber of abort BBs: " << AbortMap.size() << "\n";
       MachineBasicBlock& RollbackMBB = (*AbortMap[Trace.first]);
       MRI = &MF.getRegInfo();
       FirstInstruction = RollbackMBB.instr_begin();
