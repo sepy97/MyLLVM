@@ -41,11 +41,15 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
   for (auto &Trace : TraceMap) {
     MachineBasicBlock& TraceMBB = (*Trace.second);
 
+    errs() << "TRACE MBB Before the checkpointing: \n";
+    //TraceMBB.print(errs());
+    errs() << "\n";
+
     unsigned MemoryWriteCtr = 0; // counter of checkpointed memory writes
 
     // @@@@@@@@@@@@@@@@@@@@@@ CHECKPOINT @@@
       auto MRI = &MF.getRegInfo();
-      auto FirstInstruction = TraceMBB.instr_begin();
+      auto FirstInstruction = TraceMBB.getFirstNonPHI(); //instr_begin();
       DebugLoc FirstDL = TraceMBB.findDebugLoc(FirstInstruction);
       auto AddReg = MRI->createVirtualRegister(&X86::GR64RegClass);
 
@@ -114,13 +118,14 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
 
         }
       }
+      
       // @@@@@@@@@@@@@@@@ END OF CHECKPOINTING @@@
 
       // @@@@@@@@@@@@@@@@@@@@@@ ROLLBACK @@@
       errs() << "Number of trace BBs: " << TraceMap.size() << "\nNumber of abort BBs: " << AbortMap.size() << "\n";
       MachineBasicBlock& RollbackMBB = (*AbortMap[Trace.first]);
       MRI = &MF.getRegInfo();
-      FirstInstruction = RollbackMBB.instr_begin();
+      FirstInstruction = RollbackMBB.getFirstNonPHI(); //instr_begin();
       FirstDL = RollbackMBB.findDebugLoc(FirstInstruction);
 
       while (MemoryWriteCtr > 0) {
@@ -148,7 +153,6 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
         MemoryWriteCtr--;
       }
 
-
       // find and remove an instruction that call xabort
       for (auto &I : RollbackMBB) {
         if (I.getOpcode() == X86::XABORT) {
@@ -158,9 +162,9 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
       }
       // @@@@@@@@@@@@@@@@ END OF ROLLBACK @@@
     errs() << "Modified Trace MBB:\n";
-    TraceMBB.dump();
+    //TraceMBB.dump();
     errs() << "Modified Rollback MBB:\n";
-    RollbackMBB.dump();
+    //RollbackMBB.dump();
   }
 
   // find and remove an instruction that call xend from CommitBasicBlock
