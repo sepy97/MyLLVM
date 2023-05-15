@@ -37,6 +37,7 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
   if (!Checkpointed) return false; // no checkpointing needed
   if (!Rolledback && !Committed) return false; // code has to be either rolled back or committed if it was checkpointed
 
+  std::error_code code; raw_fd_ostream chkptDump("checkpoints.dbg", code);
   // iterate through TraceMap keys and insert checkpoints
   for (auto &Trace : TraceMap) {
     MachineBasicBlock& TraceMBB = (*Trace.second);
@@ -48,76 +49,80 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
     unsigned MemoryWriteCtr = 0; // counter of checkpointed memory writes
 
     // @@@@@@@@@@@@@@@@@@@@@@ CHECKPOINT @@@
-      auto MRI = &MF.getRegInfo();
-      auto FirstInstruction = TraceMBB.getFirstNonPHI(); //instr_begin();
-      DebugLoc FirstDL = TraceMBB.findDebugLoc(FirstInstruction);
-      auto AddReg = MRI->createVirtualRegister(&X86::GR64RegClass);
+    auto MRI = &MF.getRegInfo();
+    auto FirstInstruction = TraceMBB.getFirstNonPHI(); //instr_begin();
+    DebugLoc FirstDL = TraceMBB.findDebugLoc(FirstInstruction);
+    auto AddReg = MRI->createVirtualRegister(&X86::GR64RegClass);
 
-      errs() << "Saving a shifted rsp as checkpoint stack pointer:\n";
-      // insert LEA instruction
-      // leaq    -10000(%rsp), %ChkptReg
-      auto ChkptLEA = BuildMI(TraceMBB, FirstInstruction, FirstDL, XII->get(X86::LEA64r), AddReg);
-      ChkptLEA.addReg(X86::RSP);
-      ChkptLEA.addImm(1);
-      ChkptLEA.addReg(0);
-      ChkptLEA.addImm(-10000);
-      ChkptLEA.addReg(0);
+    errs() << "Saving a shifted rsp as checkpoint stack pointer:\n";
+    // insert LEA instruction
+    // leaq    -10000(%rsp), %ChkptReg
+    auto ChkptLEA = BuildMI(TraceMBB, FirstInstruction, FirstDL, XII->get(X86::LEA64r), AddReg);
+    ChkptLEA.addReg(X86::RSP);
+    ChkptLEA.addImm(1);
+    ChkptLEA.addReg(0);
+    ChkptLEA.addImm(-10000);
+    ChkptLEA.addReg(0);
 
-      errs() << "LEA64r: \n";
-      ChkptLEA->print(errs());
+    errs() << "LEA64r: \n";
+    ChkptLEA->print(errs());
 
-      for (auto &MI : TraceMBB) {
-        if (MI.mayStore()) {
-          // pass MI which are TSX instructions
-          if (MI.getOpcode() == X86::XBEGIN || MI.getOpcode() == X86::XEND || MI.getOpcode() == X86::XABORT || MI.getOpcode() == X86::XTEST) {
-            errs() << "Skipping TSX instruction:\n";
-            MI.print(errs());
-            continue;
-          }
-          MemoryWriteCtr++;
-
-          DebugLoc DL = MI.getDebugLoc();
-
-          const MCInstrDesc &Desc = MI.getDesc();
-          int MemRefBegin = X86II::getMemoryOperandNo(Desc.TSFlags);
-          MemRefBegin += X86II::getOperandBias(Desc);
-
-        // move memory address to the virtual register
-          auto DestReg = MRI->createVirtualRegister(&X86::GR64RegClass);
-          auto MoveDestToReg = BuildMI(TraceMBB, MI, DL, XII->get(X86::LEA64r));
-          MoveDestToReg.addDef(DestReg);
-          MoveDestToReg.add(MI.getOperand(MemRefBegin + X86::AddrBaseReg));
-          MoveDestToReg.add(MI.getOperand(MemRefBegin + X86::AddrScaleAmt));
-          MoveDestToReg.add(MI.getOperand(MemRefBegin + X86::AddrIndexReg));
-          MoveDestToReg.add(MI.getOperand(MemRefBegin + X86::AddrDisp));
-          MoveDestToReg.add(MI.getOperand(MemRefBegin + X86::AddrSegmentReg));
-
-        // move memory item to the virtual register
-          auto ItemReg = MRI->createVirtualRegister(&X86::GR64RegClass);
-            auto MoveItemToReg = BuildMI(TraceMBB, MI, DL, XII->get(X86::MOV64rm));
-            MoveItemToReg.addDef(ItemReg);
-            MoveItemToReg.add(MI.getOperand(MemRefBegin + X86::AddrBaseReg));
-            MoveItemToReg.add(MI.getOperand(MemRefBegin + X86::AddrScaleAmt));
-            MoveItemToReg.add(MI.getOperand(MemRefBegin + X86::AddrIndexReg));
-            MoveItemToReg.add(MI.getOperand(MemRefBegin + X86::AddrDisp));
-            MoveItemToReg.add(MI.getOperand(MemRefBegin + X86::AddrSegmentReg));
-
-            // push memory address
-            auto PushMemAddr = BuildMI(TraceMBB, MI, DL, XII->get(X86::MOV64mr));
-            PushMemAddr.addReg(AddReg);
-            PushMemAddr.addImm(1).addReg(0);
-            PushMemAddr.addImm(0-16*(MemoryWriteCtr-1)).addReg(0);
-            PushMemAddr.addReg(DestReg);
-
-            // move memory item
-            auto PushMemItem = BuildMI(TraceMBB, MI, DL, XII->get(X86::MOV64mr));
-            PushMemItem.addReg(AddReg);
-            PushMemItem.addImm(1).addReg(0);
-            PushMemItem.addImm(-8-16*(MemoryWriteCtr-1)).addReg(0);
-            PushMemItem.addReg(ItemReg);
-
+    for (auto &MI : TraceMBB) {
+      if (MI.mayStore()) {
+        // pass MI which are TSX instructions
+        if (MI.getOpcode() == X86::XBEGIN || MI.getOpcode() == X86::XEND || MI.getOpcode() == X86::XABORT || MI.getOpcode() == X86::XTEST) {
+          errs() << "Skipping TSX instruction:\n";
+          MI.print(errs());
+          continue;
         }
+        MemoryWriteCtr++;
+
+        DebugLoc DL = MI.getDebugLoc();
+
+        const MCInstrDesc &Desc = MI.getDesc();
+        int MemRefBegin = X86II::getMemoryOperandNo(Desc.TSFlags);
+        MemRefBegin += X86II::getOperandBias(Desc);
+
+      // move memory address to the virtual register
+        auto DestReg = MRI->createVirtualRegister(&X86::GR64RegClass);
+        auto MoveDestToReg = BuildMI(TraceMBB, MI, DL, XII->get(X86::LEA64r));
+        MoveDestToReg.addDef(DestReg);
+        MoveDestToReg.add(MI.getOperand(MemRefBegin + X86::AddrBaseReg));
+        MoveDestToReg.add(MI.getOperand(MemRefBegin + X86::AddrScaleAmt));
+        MoveDestToReg.add(MI.getOperand(MemRefBegin + X86::AddrIndexReg));
+        MoveDestToReg.add(MI.getOperand(MemRefBegin + X86::AddrDisp));
+        MoveDestToReg.add(MI.getOperand(MemRefBegin + X86::AddrSegmentReg));
+
+      // move memory item to the virtual register
+        auto ItemReg = MRI->createVirtualRegister(&X86::GR64RegClass);
+          auto MoveItemToReg = BuildMI(TraceMBB, MI, DL, XII->get(X86::MOV64rm));
+          MoveItemToReg.addDef(ItemReg);
+          MoveItemToReg.add(MI.getOperand(MemRefBegin + X86::AddrBaseReg));
+          MoveItemToReg.add(MI.getOperand(MemRefBegin + X86::AddrScaleAmt));
+          MoveItemToReg.add(MI.getOperand(MemRefBegin + X86::AddrIndexReg));
+          MoveItemToReg.add(MI.getOperand(MemRefBegin + X86::AddrDisp));
+          MoveItemToReg.add(MI.getOperand(MemRefBegin + X86::AddrSegmentReg));
+
+          // push memory address
+          auto PushMemAddr = BuildMI(TraceMBB, MI, DL, XII->get(X86::MOV64mr));
+          PushMemAddr.addReg(AddReg);
+          PushMemAddr.addImm(1).addReg(0);
+          PushMemAddr.addImm(0-16*(MemoryWriteCtr-1)).addReg(0);
+          PushMemAddr.addReg(DestReg);
+
+          // move memory item
+          auto PushMemItem = BuildMI(TraceMBB, MI, DL, XII->get(X86::MOV64mr));
+          PushMemItem.addReg(AddReg);
+          PushMemItem.addImm(1).addReg(0);
+          PushMemItem.addImm(-8-16*(MemoryWriteCtr-1)).addReg(0);
+          PushMemItem.addReg(ItemReg);
+
       }
+    }
+    unsigned TraceKey = Trace.first;
+    chkptDump << "Trace key: " << TraceKey << "\n";
+    chkptDump << "Checkpointed memory writes: " << MemoryWriteCtr << "\n";
+    chkptDump << "\n*********************************\n";
       
       // @@@@@@@@@@@@@@@@ END OF CHECKPOINTING @@@
 
@@ -166,6 +171,7 @@ bool Disasm_husky::runOnMachineFunction(MachineFunction &MF) {
     errs() << "Modified Rollback MBB:\n";
     //RollbackMBB.dump();
   }
+  chkptDump.close();
 
   // find and remove an instruction that call xend from CommitBasicBlock
   for (auto &I : *CommitBasicBlock) {
